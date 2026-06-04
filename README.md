@@ -12,7 +12,7 @@ Rack middleware for non-blocking page-view tracking via [Webtrack](https://githu
 Add to your Gemfile:
 
 ```ruby
-gem "webtrack_tracker"
+gem "webtrack_tracker", github: "agehret/webtrack_tracker", tag: "v0.1.0"
 ```
 
 Then run:
