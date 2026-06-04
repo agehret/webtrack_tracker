@@ -28,9 +28,11 @@ Create an initializer (e.g. `config/initializers/webtrack_tracker.rb`):
 ```ruby
 WebtrackTracker.configure do |config|
   config.api_key      = ENV["WEBTRACK_API_KEY"]   # required
-  config.endpoint     = "https://your-webtrack-instance.com"  # default shown
-  config.timeout      = 5          # HTTP timeout in seconds (default: 5)
-  config.ignore_paths = [          # paths/patterns to skip tracking
+  config.endpoint     = "https://your-webtrack-instance.com"
+  config.environments = [:production]              # environments in which tracking is active
+  config.timeout      = 5                          # HTTP timeout in seconds
+  config.debug_mode   = false                      # log requests and responses
+  config.ignore_paths = [                          # paths/patterns to skip tracking
     "/health",
     /\A\/assets\//
   ]
@@ -41,7 +43,9 @@ end
 |---|---|---|---|
 | `api_key` | String | `nil` | Your Webtrack API key. Tracking is disabled when blank. |
 | `endpoint` | String | `https://webtrack.example.com` | Base URL of your Webtrack instance. |
+| `environments` | Array | `[:production]` | Environments in which tracking is active. Uses `Rails.env` in Rails apps, otherwise `RACK_ENV` / `APP_ENV`. |
 | `timeout` | Integer | `5` | Open/read timeout in seconds for the tracking request. |
+| `debug_mode` | Boolean | `false` | When `true`, logs each request payload and the HTTP response code with a `[WebtrackTracker]` prefix. Uses `Rails.logger` in Rails, `$stdout` otherwise. |
 | `ignore_paths` | Array | `[]` | Strings (exact match) or Regexps to exclude from tracking. |
 
 ## Rails
