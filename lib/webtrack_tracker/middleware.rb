@@ -28,10 +28,11 @@ module WebtrackTracker
 
     def track(request)
       payload = {
-        path: request.path,
-        referrer: request.referrer,
+        path:      request.path,
+        referrer:  request.referrer,
         user_agent: request.user_agent,
-        ip: client_ip(request.env)
+        ip:        client_ip(request.env),
+        language:  request.env["HTTP_ACCEPT_LANGUAGE"]
       }
       Client.post_async("/api/track", payload)
     end
