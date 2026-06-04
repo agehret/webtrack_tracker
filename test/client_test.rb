@@ -11,9 +11,14 @@ class ClientTest < Minitest::Test
     end
   end
 
-  def test_returns_nil_when_no_api_key
+  def test_returns_nil_and_logs_when_no_api_key
     WebtrackTracker.config.api_key = nil
+    log_output = StringIO.new
+    WebtrackTracker::Client.instance_variable_set(:@logger, Logger.new(log_output))
     assert_nil WebtrackTracker::Client.post_async("/api/track", path: "/")
+    assert_match "api_key is not configured", log_output.string
+  ensure
+    WebtrackTracker::Client.instance_variable_set(:@logger, nil)
   end
 
   def test_returns_nil_when_environment_not_tracked

@@ -8,7 +8,10 @@ module WebtrackTracker
   class Client
     def self.post_async(api_path, payload)
       config = WebtrackTracker.config
-      return unless config.api_key
+      unless config.api_key
+        log("[WebtrackTracker] Tracking skipped: api_key is not configured")
+        return
+      end
       return unless tracked_environment?(config)
 
       if config.debug_mode
