@@ -5,7 +5,7 @@ class ClientTest < Minitest::Test
     super
     WebtrackTracker.configure do |c|
       c.api_key      = "test-key"
-      c.endpoint     = "http://localhost"
+      c.endpoint     = "https://localhost"
       c.timeout      = 2
       c.environments = [ENV["RACK_ENV"] || "development"]
     end
@@ -43,7 +43,7 @@ class ClientTest < Minitest::Test
   def test_swallows_connection_errors
     WebtrackTracker.configure do |c|
       c.api_key      = "key"
-      c.endpoint     = "http://127.0.0.1:19999"
+      c.endpoint     = "https://127.0.0.1:19999"
       c.timeout      = 1
       c.environments = [ENV["RACK_ENV"] || "development"]
     end

@@ -12,6 +12,10 @@ module WebtrackTracker
         log("[WebtrackTracker] Tracking skipped: api_key is not configured")
         return
       end
+      unless URI.parse(config.endpoint.to_s).scheme == "https"
+        log("[WebtrackTracker] Tracking skipped: endpoint must use HTTPS (got: #{config.endpoint})")
+        return
+      end
       return unless tracked_environment?(config)
 
       if config.debug_mode
@@ -59,7 +63,7 @@ module WebtrackTracker
     private_class_method def self.post(base_url, api_key, timeout, api_path, payload)
       uri = URI.parse("#{base_url.to_s.chomp('/')}#{api_path}")
       http = Net::HTTP.new(uri.host, uri.port)
-      http.use_ssl = (uri.scheme == "https")
+      http.use_ssl = true
       http.open_timeout = timeout
       http.read_timeout = timeout
 

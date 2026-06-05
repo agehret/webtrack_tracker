@@ -108,6 +108,6 @@ class MiddlewareTest < Minitest::Test
   private
 
   def env_for(path, extras = {})
-    Rack::MockRequest.env_for(path, extras)
+    Rack::MockRequest.env_for(path, { "HTTP_USER_AGENT" => "TestBrowser/1.0" }.merge(extras))
   end
 end

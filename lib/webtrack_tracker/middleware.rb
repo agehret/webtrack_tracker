@@ -38,7 +38,7 @@ module WebtrackTracker
         path:      request.path,
         referrer:  request.referrer,
         user_agent: request.user_agent,
-        ip:        client_ip(request.env),
+        ip:        request.ip,
         language:  request.env["HTTP_ACCEPT_LANGUAGE"]
       }
       Client.post_async("/api/track", payload)
@@ -55,13 +55,5 @@ module WebtrackTracker
       user_agent.nil? || BOT_PATTERN.match?(user_agent)
     end
 
-    def client_ip(env)
-      forwarded = env["HTTP_X_FORWARDED_FOR"]
-      if forwarded && !forwarded.strip.empty?
-        forwarded.split(",").first.strip
-      else
-        env["REMOTE_ADDR"]
-      end
-    end
   end
 end
