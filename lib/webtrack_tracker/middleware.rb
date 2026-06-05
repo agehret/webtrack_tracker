@@ -25,9 +25,16 @@ module WebtrackTracker
         request.get? &&
         !request.xhr? &&
         html_response?(headers) &&
+        !prefetch?(request) &&
         !ignore?(request.path) &&
         !asset?(request.path) &&
         !bot?(request.user_agent)
+    end
+
+    def prefetch?(request)
+      env = request.env
+      env["HTTP_SEC_PURPOSE"] == "prefetch" ||
+        env["HTTP_PURPOSE"]   == "prefetch"
     end
 
     def allowed_environment?

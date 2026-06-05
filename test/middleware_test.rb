@@ -96,6 +96,17 @@ class MiddlewareTest < Minitest::Test
     assert_equal 1, captured.size
   end
 
+  def test_skips_prefetch_requests
+    middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
+    captured = []
+    WebtrackTracker::Client.stub(:post_async, ->(_, payload) { captured << payload }) do
+      middleware.call(env_for("/page", "HTTP_SEC_PURPOSE" => "prefetch"))
+      middleware.call(env_for("/page", "HTTP_PURPOSE"     => "prefetch"))
+    end
+
+    assert_empty captured
+  end
+
   def test_skips_known_monitoring_bots
     middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
     captured = []
