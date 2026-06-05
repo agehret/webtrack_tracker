@@ -1,7 +1,9 @@
 require "test_helper"
 
 class MiddlewareTest < Minitest::Test
-  DUMMY_APP = ->(_env) { [200, { "Content-Type" => "text/plain" }, ["OK"]] }
+  HTML_APP  = ->(_env) { [200, { "Content-Type" => "text/html; charset=utf-8" }, ["<html>"]] }
+  DUMMY_APP = HTML_APP
+  JSON_APP  = ->(_env) { [200, { "Content-Type" => "application/json" }, ['{"ok":true}']] }
 
   def setup
     super
@@ -16,7 +18,7 @@ class MiddlewareTest < Minitest::Test
     WebtrackTracker::Client.stub(:post_async, nil) do
       status, _headers, body = middleware.call(env_for("/"))
       assert_equal 200, status
-      assert_equal ["OK"], body
+      assert_equal ["<html>"], body
     end
   end
 
@@ -47,6 +49,64 @@ class MiddlewareTest < Minitest::Test
     captured = []
     WebtrackTracker::Client.stub(:post_async, ->(_, payload) { captured << payload }) do
       middleware.call(env_for("/up"))
+    end
+
+    assert_empty captured
+  end
+
+  def test_skips_non_get_requests
+    middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
+    captured = []
+    WebtrackTracker::Client.stub(:post_async, ->(_, payload) { captured << payload }) do
+      middleware.call(env_for("/page", "REQUEST_METHOD" => "POST"))
+      middleware.call(env_for("/page", "REQUEST_METHOD" => "PUT"))
+      middleware.call(env_for("/page", "REQUEST_METHOD" => "DELETE"))
+    end
+
+    assert_empty captured
+  end
+
+  def test_skips_xhr_requests
+    middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
+    captured = []
+    WebtrackTracker::Client.stub(:post_async, ->(_, payload) { captured << payload }) do
+      middleware.call(env_for("/page", "HTTP_X_REQUESTED_WITH" => "XMLHttpRequest"))
+    end
+
+    assert_empty captured
+  end
+
+  def test_skips_non_html_responses
+    middleware = WebtrackTracker::Middleware.new(JSON_APP)
+    captured = []
+    WebtrackTracker::Client.stub(:post_async, ->(_, payload) { captured << payload }) do
+      middleware.call(env_for("/api/users"))
+    end
+
+    assert_empty captured
+  end
+
+  def test_tracks_html_response_with_charset
+    middleware = WebtrackTracker::Middleware.new(HTML_APP)
+    captured = []
+    WebtrackTracker::Client.stub(:post_async, ->(_, payload) { captured << payload }) do
+      middleware.call(env_for("/about"))
+    end
+
+    assert_equal 1, captured.size
+  end
+
+  def test_skips_known_monitoring_bots
+    middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
+    captured = []
+    agents = [
+      "Pingdom.com_bot_version_1.4_(http://www.pingdom.com/)",
+      "UptimeRobot/2.0",
+      "Datadog Agent/6.0",
+      "NewRelicPinger/1.0"
+    ]
+    WebtrackTracker::Client.stub(:post_async, ->(_, payload) { captured << payload }) do
+      agents.each { |ua| middleware.call(env_for("/page", "HTTP_USER_AGENT" => ua)) }
     end
 
     assert_empty captured
@@ -85,7 +145,7 @@ class MiddlewareTest < Minitest::Test
       ))
     end
 
-    assert_equal "TestBrowser/1.0",   captured.first[:user_agent]
+    assert_equal "TestBrowser/1.0",    captured.first[:user_agent]
     assert_equal "https://google.com", captured.first[:referrer]
   end
 
@@ -95,6 +155,20 @@ class MiddlewareTest < Minitest::Test
       status, = middleware.call(env_for("/page"))
       assert_equal 200, status
     end
+  end
+
+  def test_skips_tracking_in_disallowed_environment
+    WebtrackTracker.configure { |c| c.environments = [:production] }
+    middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
+    captured = []
+    rails_stub = Module.new { def self.env = "development" }
+    Object.const_set(:Rails, rails_stub)
+    WebtrackTracker::Client.stub(:post_async, ->(_, payload) { captured << payload }) do
+      middleware.call(env_for("/page"))
+    end
+    assert_empty captured
+  ensure
+    Object.send(:remove_const, :Rails) if Object.const_defined?(:Rails) && Object.const_get(:Rails) == rails_stub
   end
 
   def test_app_errors_propagate_normally
