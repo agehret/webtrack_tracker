@@ -12,7 +12,7 @@ Rack middleware for non-blocking page-view tracking via [Webtrack](https://githu
 Add to your Gemfile:
 
 ```ruby
-gem "webtrack_tracker", github: "agehret/webtrack_tracker", tag: "v0.1.0"
+gem "webtrack_tracker", github: "agehret/webtrack_tracker", tag: "v0.2.4"
 ```
 
 Then run:
@@ -32,10 +32,12 @@ WebtrackTracker.configure do |config|
   config.environments = [:production]              # environments in which tracking is active
   config.timeout      = 5                          # HTTP timeout in seconds
   config.debug_mode   = false                      # log requests and responses
-  config.ignore_paths = [                          # paths/patterns to skip tracking
+  config.ignore_paths  = [                         # paths/patterns to skip tracking
     "/health",
     /\A\/assets\//
   ]
+  config.ignore_ips    = ["192.168.1.1"]           # IP addresses to exclude from tracking
+  config.ignore_cookie = "webtrack_exclude"        # cookie name for browser-level opt-out
 end
 ```
 
@@ -47,6 +49,30 @@ end
 | `timeout` | Integer | `5` | Open/read timeout in seconds for the tracking request. |
 | `debug_mode` | Boolean | `false` | When `true`, logs each request payload and the HTTP response code with a `[WebtrackTracker]` prefix. Uses `Rails.logger` in Rails, `$stdout` otherwise. |
 | `ignore_paths` | Array | `[]` | Strings (exact match) or Regexps to exclude from tracking. |
+| `ignore_ips` | Array | `[]` | IP addresses to exclude from tracking. |
+| `ignore_cookie` | String | `"webtrack_exclude"` | Cookie name for browser-level opt-out. Set to `nil` to disable. |
+
+## Excluding your own traffic
+
+Visit `/webtrack/opt-out` in your browser to set a persistent opt-out cookie. Any browser carrying that cookie will be excluded from tracking regardless of IP or environment.
+
+To re-enable tracking for your browser, visit `/webtrack/opt-in`.
+
+These routes are handled by the middleware itself — no changes to `routes.rb` are needed.
+
+The cookie name defaults to `webtrack_exclude` and can be customised:
+
+```ruby
+config.ignore_cookie = "my_opt_out"
+```
+
+Set `ignore_cookie` to `nil` to disable the opt-out routes and cookie check entirely.
+
+You can also exclude specific IP addresses:
+
+```ruby
+config.ignore_ips = ["203.0.113.42"]
+```
 
 ## Rails
 

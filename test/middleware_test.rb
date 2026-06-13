@@ -190,6 +190,89 @@ class MiddlewareTest < Minitest::Test
     end
   end
 
+  def test_skips_ignored_ip
+    WebtrackTracker.configure { |c| c.api_key = "test-key"; c.ignore_ips = ["1.2.3.4"] }
+    middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
+    captured = []
+    WebtrackTracker::Client.stub(:post_async, ->(_, payload) { captured << payload }) do
+      middleware.call(env_for("/page", "REMOTE_ADDR" => "1.2.3.4"))
+    end
+    assert_empty captured
+  end
+
+  def test_tracks_non_ignored_ip
+    WebtrackTracker.configure { |c| c.api_key = "test-key"; c.ignore_ips = ["1.2.3.4"] }
+    middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
+    captured = []
+    WebtrackTracker::Client.stub(:post_async, ->(_, payload) { captured << payload }) do
+      middleware.call(env_for("/page", "REMOTE_ADDR" => "5.6.7.8"))
+    end
+    assert_equal 1, captured.size
+  end
+
+  def test_opt_out_route_sets_cookie
+    middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
+    status, headers, = middleware.call(env_for("/webtrack/opt-out", "HTTP_REFERER" => "/page"))
+    assert_equal 302, status
+    assert_match "webtrack_exclude", headers["Set-Cookie"]
+  end
+
+  def test_opt_out_route_redirects_to_referer
+    middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
+    _, headers, = middleware.call(env_for("/webtrack/opt-out", "HTTP_REFERER" => "/dashboard"))
+    assert_equal "/dashboard", headers["Location"]
+  end
+
+  def test_opt_out_route_falls_back_to_root
+    middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
+    _, headers, = middleware.call(env_for("/webtrack/opt-out"))
+    assert_equal "/", headers["Location"]
+  end
+
+  def test_opt_in_route_clears_cookie
+    middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
+    status, headers, = middleware.call(env_for("/webtrack/opt-in", "HTTP_REFERER" => "/page"))
+    assert_equal 302, status
+    assert_match "webtrack_exclude", headers["Set-Cookie"]
+  end
+
+  def test_opt_out_route_does_not_call_inner_app
+    called = false
+    inner_app = ->(_env) { called = true; [200, { "Content-Type" => "text/html" }, ["ok"]] }
+    middleware = WebtrackTracker::Middleware.new(inner_app)
+    middleware.call(env_for("/webtrack/opt-out"))
+    refute called
+  end
+
+  def test_opt_out_cookie_suppresses_tracking
+    middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
+    captured = []
+    WebtrackTracker::Client.stub(:post_async, ->(_, payload) { captured << payload }) do
+      middleware.call(env_for("/page", "HTTP_COOKIE" => "webtrack_exclude=1"))
+    end
+    assert_empty captured
+  end
+
+  def test_custom_ignore_cookie_name
+    WebtrackTracker.configure { |c| c.api_key = "test-key"; c.ignore_cookie = "my_opt_out" }
+    middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
+    captured = []
+    WebtrackTracker::Client.stub(:post_async, ->(_, payload) { captured << payload }) do
+      middleware.call(env_for("/page", "HTTP_COOKIE" => "my_opt_out=1"))
+    end
+    assert_empty captured
+  end
+
+  def test_nil_ignore_cookie_does_not_suppress_tracking
+    WebtrackTracker.configure { |c| c.api_key = "test-key"; c.ignore_cookie = nil }
+    middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
+    captured = []
+    WebtrackTracker::Client.stub(:post_async, ->(_, payload) { captured << payload }) do
+      middleware.call(env_for("/page", "HTTP_COOKIE" => "webtrack_exclude=1"))
+    end
+    assert_equal 1, captured.size
+  end
+
   private
 
   def env_for(path, extras = {})

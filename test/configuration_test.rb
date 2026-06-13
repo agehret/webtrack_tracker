@@ -6,6 +6,8 @@ class ConfigurationTest < Minitest::Test
     assert_equal "https://webtrack.example.com", config.endpoint
     assert_equal [:production], config.environments
     assert_equal [], config.ignore_paths
+    assert_equal [], config.ignore_ips
+    assert_equal "webtrack_exclude", config.ignore_cookie
     assert_equal 5, config.timeout
     assert_nil config.api_key
     refute config.debug_mode
