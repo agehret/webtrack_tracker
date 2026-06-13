@@ -229,6 +229,31 @@ class MiddlewareTest < Minitest::Test
     assert_equal "/", headers["Location"]
   end
 
+  def test_opt_out_return_to_takes_priority_over_referer
+    middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
+    _, headers, = middleware.call(env_for(
+      "/webtrack/opt-out?return_to=https://webtrack.info/sites/42/edit?opted_out=1",
+      "HTTP_REFERER" => "/dashboard"
+    ))
+    assert_equal "https://webtrack.info/sites/42/edit?opted_out=1", headers["Location"]
+  end
+
+  def test_opt_out_return_to_external_absolute_url
+    middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
+    _, headers, = middleware.call(env_for(
+      "/webtrack/opt-out?return_to=https://webtrack.info/sites/42/edit"
+    ))
+    assert_equal "https://webtrack.info/sites/42/edit", headers["Location"]
+  end
+
+  def test_opt_in_return_to_external_absolute_url
+    middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
+    _, headers, = middleware.call(env_for(
+      "/webtrack/opt-in?return_to=https://webtrack.info/sites/42/edit"
+    ))
+    assert_equal "https://webtrack.info/sites/42/edit", headers["Location"]
+  end
+
   def test_opt_in_route_clears_cookie
     middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
     status, headers, = middleware.call(env_for("/webtrack/opt-in", "HTTP_REFERER" => "/page"))
