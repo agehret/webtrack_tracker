@@ -27,6 +27,7 @@ module WebtrackTracker
         html_response?(headers) &&
         !prefetch?(request) &&
         !ignore?(request.path) &&
+        !ignore_ip?(request.ip) &&
         !asset?(request.path) &&
         !bot?(request.user_agent)
     end
@@ -55,6 +56,10 @@ module WebtrackTracker
         when String then path == pattern
         end
       end
+    end
+
+    def ignore_ip?(ip)
+      WebtrackTracker.config.ignore_ips.include?(ip)
     end
 
     def track(request)
