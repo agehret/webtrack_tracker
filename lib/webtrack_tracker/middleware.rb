@@ -6,10 +6,15 @@ module WebtrackTracker
       @app = app
     end
 
+    OPT_OUT_PATH = "/webtrack/opt-out"
+    OPT_IN_PATH  = "/webtrack/opt-in"
+
     def call(env)
+      request = Rack::Request.new(env)
+      return handle_opt_out(request) if opt_out_path?(request.path)
+
       status, headers, body = @app.call(env)
       begin
-        request = Rack::Request.new(env)
         track(request) if trackable?(request, status, headers)
       rescue StandardError
         nil
@@ -28,6 +33,7 @@ module WebtrackTracker
         !prefetch?(request) &&
         !ignore?(request.path) &&
         !ignore_ip?(request.ip) &&
+        !opt_out_cookie?(request) &&
         !asset?(request.path) &&
         !bot?(request.user_agent)
     end
@@ -60,6 +66,28 @@ module WebtrackTracker
 
     def ignore_ip?(ip)
       WebtrackTracker.config.ignore_ips.include?(ip)
+    end
+
+    def opt_out_cookie?(request)
+      cookie_name = WebtrackTracker.config.ignore_cookie
+      cookie_name && request.cookies.key?(cookie_name)
+    end
+
+    def opt_out_path?(path)
+      path == OPT_OUT_PATH || path == OPT_IN_PATH
+    end
+
+    def handle_opt_out(request)
+      response = Rack::Response.new
+      cookie_name = WebtrackTracker.config.ignore_cookie
+      if request.path == OPT_OUT_PATH
+        response.set_cookie(cookie_name, value: "1", path: "/", expires: Time.now + (10 * 365 * 24 * 60 * 60), httponly: true)
+      else
+        response.delete_cookie(cookie_name, path: "/")
+      end
+      redirect_to = request.params["return_to"] || request.referer || "/"
+      response.redirect(redirect_to)
+      response.finish
     end
 
     def track(request)
