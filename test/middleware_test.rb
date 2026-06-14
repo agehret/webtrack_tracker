@@ -210,6 +210,36 @@ class MiddlewareTest < Minitest::Test
     assert_equal 1, captured.size
   end
 
+  def test_skips_ignored_ip_when_ipv4_mapped_ipv6
+    WebtrackTracker.configure { |c| c.api_key = "test-key"; c.ignore_ips = ["1.2.3.4"] }
+    middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
+    captured = []
+    WebtrackTracker::Client.stub(:post_async, ->(_, payload) { captured << payload }) do
+      middleware.call(env_for("/page", "REMOTE_ADDR" => "::ffff:1.2.3.4"))
+    end
+    assert_empty captured
+  end
+
+  def test_skips_ignored_ip_cidr_range
+    WebtrackTracker.configure { |c| c.api_key = "test-key"; c.ignore_ips = ["1.2.3.0/24"] }
+    middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
+    captured = []
+    WebtrackTracker::Client.stub(:post_async, ->(_, payload) { captured << payload }) do
+      middleware.call(env_for("/page", "REMOTE_ADDR" => "1.2.3.99"))
+    end
+    assert_empty captured
+  end
+
+  def test_tracks_ip_outside_ignored_cidr_range
+    WebtrackTracker.configure { |c| c.api_key = "test-key"; c.ignore_ips = ["1.2.3.0/24"] }
+    middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
+    captured = []
+    WebtrackTracker::Client.stub(:post_async, ->(_, payload) { captured << payload }) do
+      middleware.call(env_for("/page", "REMOTE_ADDR" => "1.2.4.1"))
+    end
+    assert_equal 1, captured.size
+  end
+
   def test_opt_out_route_sets_cookie
     middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
     status, headers, = middleware.call(env_for("/webtrack/opt-out", "HTTP_REFERER" => "/page"))

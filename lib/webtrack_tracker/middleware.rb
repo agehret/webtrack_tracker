@@ -1,4 +1,5 @@
 require "rack"
+require "ipaddr"
 
 module WebtrackTracker
   class Middleware
@@ -65,7 +66,23 @@ module WebtrackTracker
     end
 
     def ignore_ip?(ip)
-      WebtrackTracker.config.ignore_ips.include?(ip)
+      return false if ip.nil? || ip.empty?
+      request_addr = parse_ip(ip)
+      return false unless request_addr
+      WebtrackTracker.config.ignore_ips.any? do |entry|
+        configured = parse_ip(entry)
+        next false unless configured
+        configured == request_addr || configured.include?(request_addr)
+      rescue IPAddr::InvalidAddressError
+        false
+      end
+    end
+
+    def parse_ip(ip)
+      addr = IPAddr.new(ip.to_s.strip)
+      addr.ipv4_mapped? ? IPAddr.new(addr.native.to_s) : addr
+    rescue IPAddr::InvalidAddressError
+      nil
     end
 
     def opt_out_cookie?(request)
