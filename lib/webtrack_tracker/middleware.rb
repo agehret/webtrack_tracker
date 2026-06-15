@@ -1,5 +1,6 @@
 require "rack"
 require "ipaddr"
+require "uri"
 
 module WebtrackTracker
   class Middleware
@@ -34,6 +35,7 @@ module WebtrackTracker
         !prefetch?(request) &&
         !ignore?(request.path) &&
         !ignore_ip?(request.ip) &&
+        !ignore_referrer_ip?(request.referrer) &&
         !opt_out_cookie?(request) &&
         !asset?(request.path) &&
         !bot?(request.user_agent)
@@ -83,6 +85,14 @@ module WebtrackTracker
       addr.ipv4_mapped? ? IPAddr.new(addr.native.to_s) : addr
     rescue IPAddr::InvalidAddressError
       nil
+    end
+
+    def ignore_referrer_ip?(referrer)
+      return false if referrer.nil? || referrer.empty?
+      host = URI.parse(referrer).host
+      host && ignore_ip?(host)
+    rescue URI::InvalidURIError
+      false
     end
 
     def opt_out_cookie?(request)

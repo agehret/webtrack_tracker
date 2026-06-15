@@ -240,6 +240,26 @@ class MiddlewareTest < Minitest::Test
     assert_equal 1, captured.size
   end
 
+  def test_skips_request_with_ignored_ip_as_referrer_host
+    WebtrackTracker.configure { |c| c.api_key = "test-key"; c.ignore_ips = ["1.2.3.4"] }
+    middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
+    captured = []
+    WebtrackTracker::Client.stub(:post_async, ->(_, payload) { captured << payload }) do
+      middleware.call(env_for("/page", "REMOTE_ADDR" => "9.9.9.9", "HTTP_REFERER" => "http://1.2.3.4/spam"))
+    end
+    assert_empty captured
+  end
+
+  def test_tracks_request_with_unignored_referrer
+    WebtrackTracker.configure { |c| c.api_key = "test-key"; c.ignore_ips = ["1.2.3.4"] }
+    middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
+    captured = []
+    WebtrackTracker::Client.stub(:post_async, ->(_, payload) { captured << payload }) do
+      middleware.call(env_for("/page", "REMOTE_ADDR" => "9.9.9.9", "HTTP_REFERER" => "http://example.com/page"))
+    end
+    assert_equal 1, captured.size
+  end
+
   def test_opt_out_route_sets_cookie
     middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
     status, headers, = middleware.call(env_for("/webtrack/opt-out", "HTTP_REFERER" => "/page"))
