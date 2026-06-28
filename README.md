@@ -94,6 +94,18 @@ use WebtrackTracker::Middleware
 run MyApp
 ```
 
+## UTM parameters
+
+Page views automatically capture the five standard UTM parameters when present in the request query string:
+
+- `utm_source`
+- `utm_medium`
+- `utm_campaign`
+- `utm_term`
+- `utm_content`
+
+For example, a visit to `/landing?utm_source=google&utm_medium=cpc&utm_campaign=spring` forwards those values to Webtrack alongside the page view, where they are used for channel attribution and campaign reporting. Only these keys are extracted — arbitrary query parameters are never forwarded, keeping potentially sensitive query data out of the tracking payload.
+
 ## Tracking custom events
 
 Call `WebtrackTracker.track_event` anywhere in your application to record a named event:

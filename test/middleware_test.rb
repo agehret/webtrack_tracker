@@ -34,6 +34,36 @@ class MiddlewareTest < Minitest::Test
     assert_equal "/about", captured.first[1][:path]
   end
 
+  def test_tracks_utm_params
+    middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
+    captured = []
+    WebtrackTracker::Client.stub(:post_async, ->(_, payload) { captured << payload }) do
+      middleware.call(env_for("/landing?utm_source=google&utm_medium=cpc&utm_campaign=spring&utm_term=shoes&utm_content=ad1"))
+    end
+
+    payload = captured.first
+    assert_equal "/landing", payload[:path]
+    assert_equal "google", payload[:utm_source]
+    assert_equal "cpc", payload[:utm_medium]
+    assert_equal "spring", payload[:utm_campaign]
+    assert_equal "shoes", payload[:utm_term]
+    assert_equal "ad1", payload[:utm_content]
+  end
+
+  def test_omits_absent_and_blank_utm_params
+    middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
+    captured = []
+    WebtrackTracker::Client.stub(:post_async, ->(_, payload) { captured << payload }) do
+      middleware.call(env_for("/landing?utm_source=google&utm_medium=&other=x"))
+    end
+
+    payload = captured.first
+    assert_equal "google", payload[:utm_source]
+    refute payload.key?(:utm_medium)
+    refute payload.key?(:utm_campaign)
+    refute payload.key?(:other)
+  end
+
   def test_ignores_regex_path
     middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
     captured = []

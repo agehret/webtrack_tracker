@@ -117,6 +117,8 @@ module WebtrackTracker
       response.finish
     end
 
+    UTM_KEYS = %w[utm_source utm_medium utm_campaign utm_term utm_content].freeze
+
     def track(request)
       payload = {
         path:       request.path,
@@ -124,8 +126,17 @@ module WebtrackTracker
         user_agent: request.user_agent,
         ip:         request.ip,
         language:   request.env["HTTP_ACCEPT_LANGUAGE"]
-      }
+      }.merge(utm_params(request))
       Client.post_async("/api/track", payload)
+    end
+
+    def utm_params(request)
+      UTM_KEYS.each_with_object({}) do |key, acc|
+        value = request.params[key]
+        acc[key.to_sym] = value if value.is_a?(String) && !value.empty?
+      end
+    rescue StandardError
+      {}
     end
 
     ASSET_PATTERN = /\.(js|css|png|jpg|jpeg|gif|svg|webp|ico|woff|woff2|ttf|eot|map|json|xml|txt)(\?.*)?$/i
