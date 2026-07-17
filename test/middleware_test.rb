@@ -116,6 +116,18 @@ class MiddlewareTest < Minitest::Test
     assert_empty captured
   end
 
+  def test_skips_non_2xx_responses
+    captured = []
+    WebtrackTracker::Client.stub(:post_async, ->(_, payload) { captured << payload }) do
+      [301, 302, 404, 500].each do |code|
+        app = ->(_env) { [code, { "Content-Type" => "text/html; charset=utf-8" }, ["<html>"]] }
+        WebtrackTracker::Middleware.new(app).call(env_for("/page"))
+      end
+    end
+
+    assert_empty captured
+  end
+
   def test_tracks_html_response_with_charset
     middleware = WebtrackTracker::Middleware.new(HTML_APP)
     captured = []
@@ -188,6 +200,48 @@ class MiddlewareTest < Minitest::Test
 
     assert_equal "TestBrowser/1.0",    captured.first[:user_agent]
     assert_equal "https://google.com", captured.first[:referrer]
+  end
+
+  def test_downcases_referrer
+    middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
+    captured = []
+    WebtrackTracker::Client.stub(:post_async, ->(_, payload) { captured << payload }) do
+      middleware.call(env_for("/page", "HTTP_REFERER" => "HTTPS://Google.COM/Search?Q=Foo"))
+    end
+
+    assert_equal "https://google.com/search?q=foo", captured.first[:referrer]
+  end
+
+  def test_sends_nil_referrer_when_absent
+    middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
+    captured = []
+    WebtrackTracker::Client.stub(:post_async, ->(_, payload) { captured << payload }) do
+      middleware.call(env_for("/page"))
+    end
+
+    assert_nil captured.first[:referrer]
+  end
+
+  def test_skips_dotfile_paths
+    middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
+    captured = []
+    WebtrackTracker::Client.stub(:post_async, ->(_, payload) { captured << payload }) do
+      middleware.call(env_for("/.env"))
+      middleware.call(env_for("/.pgpass"))
+      middleware.call(env_for("/.git/config"))
+    end
+
+    assert_empty captured
+  end
+
+  def test_tracks_dot_inside_path
+    middleware = WebtrackTracker::Middleware.new(DUMMY_APP)
+    captured = []
+    WebtrackTracker::Client.stub(:post_async, ->(_, payload) { captured << payload }) do
+      middleware.call(env_for("/blog/.hidden-but-real"))
+    end
+
+    assert_equal 1, captured.size
   end
 
   def test_tracking_errors_do_not_affect_response

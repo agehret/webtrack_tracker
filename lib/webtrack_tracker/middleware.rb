@@ -34,6 +34,7 @@ module WebtrackTracker
         html_response?(headers) &&
         !prefetch?(request) &&
         !ignore?(request.path) &&
+        !dotfile?(request.path) &&
         !ignore_ip?(request.ip) &&
         !ignore_referrer_ip?(request.referrer) &&
         !opt_out_cookie?(request) &&
@@ -122,7 +123,7 @@ module WebtrackTracker
     def track(request)
       payload = {
         path:       request.path,
-        referrer:   request.referrer,
+        referrer:   request.referrer&.downcase,
         user_agent: request.user_agent,
         ip:         request.ip,
         language:   request.env["HTTP_ACCEPT_LANGUAGE"]
@@ -155,6 +156,10 @@ module WebtrackTracker
 
     def asset?(path)
       ASSET_PATTERN.match?(path)
+    end
+
+    def dotfile?(path)
+      path.start_with?("/.")
     end
 
     def bot?(user_agent)
