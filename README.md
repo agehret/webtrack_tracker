@@ -38,6 +38,7 @@ WebtrackTracker.configure do |config|
   ]
   config.ignore_ips    = ["192.168.1.1"]           # IP addresses to exclude from tracking
   config.ignore_cookie = "webtrack_exclude"        # cookie name for browser-level opt-out
+  config.errortracking = false                     # also report application errors to Webtrack
 end
 ```
 
@@ -51,6 +52,7 @@ end
 | `ignore_paths` | Array | `[]` | Strings (exact match) or Regexps to exclude from tracking. |
 | `ignore_ips` | Array | `[]` | IP addresses to exclude from tracking. |
 | `ignore_cookie` | String | `"webtrack_exclude"` | Cookie name for browser-level opt-out. Set to `nil` to disable. |
+| `errortracking` | Boolean | `false` | When `true` (Rails only), application errors are reported to Webtrack via `Rails.error`. See [Error tracking](#error-tracking). |
 
 ## Excluding your own traffic
 
@@ -105,6 +107,29 @@ Page views automatically capture the five standard UTM parameters when present i
 - `utm_content`
 
 For example, a visit to `/landing?utm_source=google&utm_medium=cpc&utm_campaign=spring` forwards those values to Webtrack alongside the page view, where they are used for channel attribution and campaign reporting. Only these keys are extracted — arbitrary query parameters are never forwarded, keeping potentially sensitive query data out of the tracking payload.
+
+## Error tracking
+
+Set `config.errortracking = true` and the gem subscribes to the [Rails error reporter](https://guides.rubyonrails.org/error_reporting.html) (`Rails.error`). Unhandled exceptions from requests and jobs — plus anything you report manually via `Rails.error.report` — are forwarded to your Webtrack instance, where they are grouped into issues per site (see the "Fehler" tab). New issues and regressions trigger a notification email.
+
+- Reports are fire-and-forget on a background thread; your app never waits and the subscriber never raises.
+- The `context` hash is masked with your app's `Rails.application.config.filter_parameters` before it leaves the process.
+- Like page views, error reports respect `environments` (default: production only).
+
+Enrich the context so occurrences carry request and user information:
+
+```ruby
+# e.g. in ApplicationController
+before_action do
+  Rails.error.set_context(
+    request_id: request.request_id,
+    user_id: Current.user&.id,
+    params: request.filtered_parameters.except("controller", "action")
+  )
+end
+```
+
+Rails only — in plain Rack apps the flag has no effect.
 
 ## Tracking custom events
 
