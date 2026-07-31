@@ -114,18 +114,20 @@ Set `config.errortracking = true` and the gem subscribes to the [Rails error rep
 
 - Reports are fire-and-forget on a background thread; your app never waits and the subscriber never raises.
 - The `context` hash is masked with your app's `Rails.application.config.filter_parameters` before it leaves the process.
+- Backtraces are run through your app's `Rails.backtrace_cleaner`, so app frames are relative (`app/models/user.rb:42:in …`) and gem frames read as `gemname (version) lib/…`. All frames are kept — Webtrack distinguishes app from framework frames and offers an app-only toggle.
 - Like page views, error reports respect `environments` (default: production only).
 
-Enrich the context so occurrences carry request and user information:
+Occurrences are automatically enriched with whatever the Rails execution context provides:
+
+- **Request errors** carry `controller` (`PostsController#show`), `method`, `path`, `params` (masked with your `filter_parameters`), `ip`, `user_agent`, `referrer`, `request_id`, and — when the controller responds to `current_user` (Devise and most hand-rolled auth) — `user_id`.
+- **Job errors** carry the job class, `job_id`, `queue`, `executions` (attempt count), and the job's arguments in serialized form (models appear as compact `gid://…` URIs, never as attribute dumps).
+
+Anything you add via `Rails.error.set_context` is included as well and takes precedence over the automatic values — use it for data the gem can't know:
 
 ```ruby
 # e.g. in ApplicationController
 before_action do
-  Rails.error.set_context(
-    request_id: request.request_id,
-    user_id: Current.user&.id,
-    params: request.filtered_parameters.except("controller", "action")
-  )
+  Rails.error.set_context(account_id: Current.account&.id)
 end
 ```
 

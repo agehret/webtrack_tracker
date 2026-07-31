@@ -53,7 +53,131 @@ class ErrorSubscriberTest < Minitest::Test
     end
   end
 
+  def test_backtrace_is_run_through_the_rails_cleaner_with_all_frames
+    fake = FakeCleaner.new([ "app/models/user.rb:42:in 'find_name'" ])
+
+    calls = capture_post do
+      subscriber.stub(:backtrace_cleaner, fake) do
+        subscriber.report(sample_error, handled: false, severity: :error, context: {})
+      end
+    end
+
+    _path, payload = calls.first
+    assert_equal :all, fake.kind, "must keep every frame (filters only, no silencing)"
+    assert_equal [ "app/models/user.rb:42:in 'find_name'" ], payload[:backtrace]
+  end
+
+  def test_backtrace_falls_back_to_raw_when_the_cleaner_returns_nothing
+    calls = capture_post do
+      subscriber.stub(:backtrace_cleaner, FakeCleaner.new([])) do
+        subscriber.report(sample_error, handled: false, severity: :error, context: {})
+      end
+    end
+
+    _path, payload = calls.first
+    assert payload[:backtrace].any?, "an empty cleaner result must not blank out the backtrace"
+  end
+
   def test_errortracking_config_defaults_to_off
     refute WebtrackTracker.config.errortracking
+  end
+
+  def test_request_context_is_unpacked_from_the_controller
+    calls = capture_post do
+      subscriber.report(sample_error, handled: false, severity: :error, context: { controller: FakeController.new })
+    end
+
+    _path, payload = calls.first
+    ctx = payload[:context]
+    assert_equal "ErrorSubscriberTest::FakeController#show", ctx["controller"]
+    assert_equal "GET", ctx["method"]
+    assert_equal "/posts/1", ctx["path"]
+    assert_equal({ "id" => "1", "password" => "[FILTERED]" }, ctx["params"])
+    assert_equal "203.0.113.9", ctx["ip"]
+    assert_equal "TestBrowser/1.0", ctx["user_agent"]
+    assert_equal "https://example.com/", ctx["referrer"]
+    assert_equal "req-abc-123", ctx["request_id"]
+    assert_equal 7, ctx["user_id"]
+  end
+
+  def test_host_app_context_wins_over_extracted_request_context
+    calls = capture_post do
+      subscriber.report(sample_error, handled: false, severity: :error,
+        context: { controller: FakeController.new, user_id: 99 })
+    end
+
+    _path, payload = calls.first
+    assert_equal 99, payload[:context]["user_id"]
+  end
+
+  def test_a_plain_controller_context_value_is_left_alone
+    calls = capture_post do
+      subscriber.report(sample_error, handled: false, severity: :error, context: { controller: "manual" })
+    end
+
+    _path, payload = calls.first
+    assert_equal "manual", payload[:context]["controller"]
+  end
+
+  def test_controllers_without_current_user_report_no_user_id
+    calls = capture_post do
+      subscriber.report(sample_error, handled: false, severity: :error, context: { controller: FakeControllerWithoutUser.new })
+    end
+
+    _path, payload = calls.first
+    refute payload[:context].key?("user_id")
+    assert_equal "/posts/1", payload[:context]["path"]
+  end
+
+  def test_job_context_is_unpacked_from_the_job
+    calls = capture_post do
+      subscriber.report(sample_error, handled: false, severity: :error, context: { job: FakeJob.new })
+    end
+
+    _path, payload = calls.first
+    ctx = payload[:context]
+    assert_equal "ErrorSubscriberTest::FakeJob", ctx["job"]
+    assert_equal "job-uuid-1", ctx["job_id"]
+    assert_equal "mailers", ctx["queue"]
+    assert_equal 3, ctx["executions"]
+    assert_equal [ "gid://app/User/1" ], ctx["arguments"]
+  end
+
+  class FakeRequest
+    def request_method = "GET"
+    def path = "/posts/1"
+    def filtered_parameters = { "controller" => "posts", "action" => "show", "id" => "1", "password" => "[FILTERED]" }
+    def remote_ip = "203.0.113.9"
+    def user_agent = "TestBrowser/1.0"
+    def referer = "https://example.com/"
+    def request_id = "req-abc-123"
+  end
+
+  class FakeController
+    def request = FakeRequest.new
+    def action_name = "show"
+
+    private
+
+    def current_user = Struct.new(:id).new(7)
+  end
+
+  class FakeControllerWithoutUser
+    def request = FakeRequest.new
+    def action_name = "show"
+  end
+
+  class FakeJob
+    def job_id = "job-uuid-1"
+    def queue_name = "mailers"
+    def executions = 3
+    def serialize = { "job_class" => "FakeJob", "arguments" => [ "gid://app/User/1" ] }
+  end
+
+  class FakeCleaner
+    attr_reader :kind
+
+    def initialize(result) = @result = result
+    def clean(_backtrace, kind) = (@kind = kind) && @result
   end
 end
