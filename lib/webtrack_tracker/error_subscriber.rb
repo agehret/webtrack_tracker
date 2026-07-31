@@ -111,21 +111,25 @@ module WebtrackTracker
       nil
     end
 
-    # Runs the backtrace through the host app's Rails.backtrace_cleaner so paths
-    # are concise: app frames become relative ("app/models/user.rb:42:in …")
-    # and gem frames become "gemname (version) lib/…". `:all` keeps every frame
-    # (filters only, no silencing) — the Webtrack UI still distinguishes app vs
-    # framework frames and offers an app-only toggle. Falls back to the raw
-    # backtrace when no cleaner is available or it yields nothing.
+    # Runs the backtrace through the host app's Rails.backtrace_cleaner, which
+    # by default silences framework frames and makes app frames relative — the
+    # same concise trace Rails shows on its error pages. An error raised wholly
+    # inside framework code silences to nothing; in that case we keep all frames
+    # (still cleaned) rather than send an empty backtrace, and fall back to the
+    # raw trace when no cleaner is available.
     def backtrace_for(error)
       raw = Array(error.backtrace).first(BACKTRACE_LIMIT)
       cleaner = backtrace_cleaner
       return raw unless cleaner
 
-      cleaned = cleaner.clean(raw, :all)
-      cleaned && !cleaned.empty? ? cleaned : raw
+      cleaned = presence(cleaner.clean(raw)) || presence(cleaner.clean(raw, :all))
+      cleaned || raw
     rescue StandardError
       Array(error.backtrace).first(BACKTRACE_LIMIT)
+    end
+
+    def presence(array)
+      array if array && !array.empty?
     end
 
     def backtrace_cleaner

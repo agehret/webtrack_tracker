@@ -114,7 +114,7 @@ Set `config.errortracking = true` and the gem subscribes to the [Rails error rep
 
 - Reports are fire-and-forget on a background thread; your app never waits and the subscriber never raises.
 - The `context` hash is masked with your app's `Rails.application.config.filter_parameters` before it leaves the process.
-- Backtraces are run through your app's `Rails.backtrace_cleaner`, so app frames are relative (`app/models/user.rb:42:in …`) and gem frames read as `gemname (version) lib/…`. All frames are kept — Webtrack distinguishes app from framework frames and offers an app-only toggle.
+- Backtraces are run through your app's `Rails.backtrace_cleaner` — the same concise, app-only trace Rails shows on its error pages (framework frames silenced, app frames relative). Errors raised entirely in framework code keep all frames so the trace is never empty.
 - Like page views, error reports respect `environments` (default: production only).
 
 Occurrences are automatically enriched with whatever the Rails execution context provides:

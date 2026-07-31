@@ -53,8 +53,8 @@ class ErrorSubscriberTest < Minitest::Test
     end
   end
 
-  def test_backtrace_is_run_through_the_rails_cleaner_with_all_frames
-    fake = FakeCleaner.new([ "app/models/user.rb:42:in 'find_name'" ])
+  def test_backtrace_uses_the_silenced_app_only_cleaner_output
+    fake = FakeCleaner.new(silence: [ "app/models/user.rb:42:in 'find_name'" ])
 
     calls = capture_post do
       subscriber.stub(:backtrace_cleaner, fake) do
@@ -63,13 +63,27 @@ class ErrorSubscriberTest < Minitest::Test
     end
 
     _path, payload = calls.first
-    assert_equal :all, fake.kind, "must keep every frame (filters only, no silencing)"
+    assert_equal [ :silence ], fake.kinds, "must prefer the default (silencing) cleaner, app-only"
     assert_equal [ "app/models/user.rb:42:in 'find_name'" ], payload[:backtrace]
+  end
+
+  def test_backtrace_falls_back_to_all_frames_for_framework_only_errors
+    fake = FakeCleaner.new(silence: [], all: [ "actionpack (8.1.3) lib/x.rb:1:in 'call'" ])
+
+    calls = capture_post do
+      subscriber.stub(:backtrace_cleaner, fake) do
+        subscriber.report(sample_error, handled: false, severity: :error, context: {})
+      end
+    end
+
+    _path, payload = calls.first
+    assert_equal [ :silence, :all ], fake.kinds, "empty app-only trace should fall back to all frames"
+    assert_equal [ "actionpack (8.1.3) lib/x.rb:1:in 'call'" ], payload[:backtrace]
   end
 
   def test_backtrace_falls_back_to_raw_when_the_cleaner_returns_nothing
     calls = capture_post do
-      subscriber.stub(:backtrace_cleaner, FakeCleaner.new([])) do
+      subscriber.stub(:backtrace_cleaner, FakeCleaner.new(silence: [], all: [])) do
         subscriber.report(sample_error, handled: false, severity: :error, context: {})
       end
     end
@@ -174,10 +188,19 @@ class ErrorSubscriberTest < Minitest::Test
     def serialize = { "job_class" => "FakeJob", "arguments" => [ "gid://app/User/1" ] }
   end
 
+  # Mirrors Rails.backtrace_cleaner#clean(backtrace, kind = :silence): the
+  # default silences framework frames, any other kind (:all) keeps them.
   class FakeCleaner
-    attr_reader :kind
+    attr_reader :kinds
 
-    def initialize(result) = @result = result
-    def clean(_backtrace, kind) = (@kind = kind) && @result
+    def initialize(silence:, all: silence)
+      @results = { silence: silence, all: all }
+      @kinds = []
+    end
+
+    def clean(_backtrace, kind = :silence)
+      @kinds << kind
+      @results.fetch(kind, [])
+    end
   end
 end
