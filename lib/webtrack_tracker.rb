@@ -20,6 +20,16 @@ module WebtrackTracker
       payload[:ip] = ip if ip
       Client.post_async("/api/event", payload)
     end
+
+    # Reports a successful cron job run to the matching Webtrack check-in.
+    # Pass a name configured in config.checkins, or a raw token via token:.
+    # Unlike the tracking calls this is synchronous — cron processes exit right
+    # after the ping, so a background thread could be killed mid-request.
+    # Returns true/false and never raises.
+    def ping(name = nil, token: nil)
+      token ||= config.checkins[name.to_sym] || config.checkins[name.to_s] if name
+      Client.ping(token, checkin: name)
+    end
   end
 end
 

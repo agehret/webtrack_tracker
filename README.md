@@ -39,6 +39,9 @@ WebtrackTracker.configure do |config|
   config.ignore_ips    = ["192.168.1.1"]           # IP addresses to exclude from tracking
   config.ignore_cookie = "webtrack_exclude"        # cookie name for browser-level opt-out
   config.errortracking = false                     # also report application errors to Webtrack
+  config.checkins      = {                         # ping tokens for cron job check-ins
+    backup: ENV["WEBTRACK_CHECKIN_BACKUP"]
+  }
 end
 ```
 
@@ -53,6 +56,7 @@ end
 | `ignore_ips` | Array | `[]` | IP addresses to exclude from tracking. |
 | `ignore_cookie` | String | `"webtrack_exclude"` | Cookie name for browser-level opt-out. Set to `nil` to disable. |
 | `errortracking` | Boolean | `false` | When `true` (Rails only), application errors are reported to Webtrack via `Rails.error`. See [Error tracking](#error-tracking). |
+| `checkins` | Hash | `{}` | Named ping tokens for cron job monitoring. See [Cron job monitoring](#cron-job-monitoring-check-ins). |
 
 ## Excluding your own traffic
 
@@ -156,6 +160,41 @@ WebtrackTracker.track_event(
 | `ip:` | no | IP address of the visitor. |
 
 All tracking calls are fire-and-forget — errors are silently swallowed so they never affect your application.
+
+## Cron job monitoring (check-ins)
+
+Webtrack check-ins watch scheduled jobs: the job pings its check-in URL after every successful run, and Webtrack alerts you when the ping stays out past the expected schedule plus grace time. Create a check-in in Webtrack (site → Check-ins), then configure its token:
+
+```ruby
+WebtrackTracker.configure do |config|
+  config.endpoint = "https://your-webtrack-instance.com"
+  config.checkins = {
+    backup:  ENV["WEBTRACK_CHECKIN_BACKUP"],
+    reports: ENV["WEBTRACK_CHECKIN_REPORTS"]
+  }
+end
+```
+
+Ping at the end of a successful run — as the last line of a rake task, job, or script:
+
+```ruby
+WebtrackTracker.ping(:backup)
+```
+
+You can also pass a raw token without configuring it first:
+
+```ruby
+WebtrackTracker.ping(token: "your-ping-token")
+```
+
+Behaviour, deliberately different from the tracking calls:
+
+- **Synchronous.** Cron processes exit right after the ping; a fire-and-forget thread could be killed mid-request. The call blocks until delivered (bounded by `timeout` per attempt) and returns `true`/`false`. It never raises.
+- **Retries.** Network errors and 5xx responses are retried up to 3 attempts, because a lost ping causes a false alarm. A 4xx response (wrong token) is final.
+- **Environment-gated.** Like tracking, pings only fire in `environments` (default: production), so development runs never silence a production check-in.
+- No `api_key` needed — the token identifies the check-in.
+
+Only ping after *successful* runs: if the job fails or crashes, the missing ping is exactly what triggers the alert.
 
 ## License
 
