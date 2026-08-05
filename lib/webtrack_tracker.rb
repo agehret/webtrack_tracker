@@ -2,6 +2,7 @@ require_relative "webtrack_tracker/version"
 require_relative "webtrack_tracker/configuration"
 require_relative "webtrack_tracker/client"
 require_relative "webtrack_tracker/middleware"
+require_relative "webtrack_tracker/error_middleware"
 require_relative "webtrack_tracker/error_subscriber"
 
 module WebtrackTracker

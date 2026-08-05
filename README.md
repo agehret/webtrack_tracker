@@ -55,7 +55,7 @@ end
 | `ignore_paths` | Array | `[]` | Strings (exact match) or Regexps to exclude from tracking. |
 | `ignore_ips` | Array | `[]` | IP addresses to exclude from tracking. |
 | `ignore_cookie` | String | `"webtrack_exclude"` | Cookie name for browser-level opt-out. Set to `nil` to disable. |
-| `errortracking` | Boolean | `false` | When `true` (Rails only), application errors are reported to Webtrack via `Rails.error`. See [Error tracking](#error-tracking). |
+| `errortracking` | Boolean | `false` | When `true` (Rails only), application errors are reported to Webtrack via `Rails.error`, plus the exceptions Rails maps to a status code itself. See [Error tracking](#error-tracking). |
 | `checkins` | Hash | `{}` | Named ping tokens for cron job monitoring. See [Cron job monitoring](#cron-job-monitoring-check-ins). |
 
 ## Excluding your own traffic
@@ -134,6 +134,22 @@ before_action do
   Rails.error.set_context(account_id: Current.account&.id)
 end
 ```
+
+### Exceptions Rails turns into a status code
+
+The error reporter alone is not the whole picture. `ActionDispatch::ShowExceptions` deliberately skips reporting for every exception that has an entry in `ActionDispatch::ExceptionWrapper.rescue_responses`:
+
+```ruby
+request.set_header "action_dispatch.report_exception", !wrapper.rescue_response?
+```
+
+So `ActiveRecord::RecordNotFound`, `ActionController::ParameterMissing`, `ActionController::BadRequest`, `ActionController::UnknownFormat`, `ActionDispatch::Http::Parameters::ParseError`, `Rack::QueryParser::InvalidParameterError` and the rest of that list never reach `Rails.error` — an APM agent with its own Rack middleware records them, the error reporter does not. That is why the same application can look a lot quieter in Webtrack than in an APM tool.
+
+The Railtie therefore also inserts `WebtrackTracker::ErrorMiddleware` right below `ActionDispatch::DebugExceptions`, where those exceptions are still exceptions. It reports **exactly the complement** — the `rescue_responses` ones and nothing else — so errors that end in a 500 keep arriving through the error reporter and are never reported twice.
+
+These occurrences arrive as `handled: true` with severity `warning` and the source `webtrack_tracker.rack`, which keeps 4xx noise (bots posting junk, stale links) apart from real crashes in Webtrack.
+
+Note that this gap only exists with reloading disabled. In development `ActionDispatch::Reloader` — an `ActionDispatch::Executor` subclass — sits below `DebugExceptions` and reports *every* exception unconditionally, so those occurrences keep the source `application.action_dispatch` there. Production has no `Reloader` in its middleware stack, which is exactly where the middleware takes over.
 
 Rails only — in plain Rack apps the flag has no effect.
 
